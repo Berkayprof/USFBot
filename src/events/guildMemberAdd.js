@@ -17,7 +17,6 @@ export default {
         const { guild, user } = member;
         
         const config = await getGuildConfig(member.client, guild.id);
-        
         const welcomeConfig = await getWelcomeConfig(member.client, guild.id);
         
         const welcomeChannelId = welcomeConfig?.channelId;
@@ -26,6 +25,7 @@ export default {
             const channel = guild.channels.cache.get(welcomeChannelId);
             const me = guild.members.me;
             const permissions = channel?.isTextBased?.() && me ? channel.permissionsFor(me) : null;
+
             // Skip only the welcome message if permissions are missing; the rest of the
             // join pipeline (auto-role, verification, logging, counters) must still run.
             if (permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
@@ -34,9 +34,7 @@ export default {
                     welcomeConfig.welcomeMessage || welcomeConfig.welcomeEmbed?.description || botConfig.welcome?.defaultWelcomeMessage || 'Welcome {user} to {server}!',
                     formatData
                 );
-
                 const messageContent = welcomeConfig.welcomePing ? user.toString() : null;
-
                 const embedTitle = formatWelcomeMessage(
                     welcomeConfig.welcomeEmbed?.title || '🎉 Welcome!',
                     formatData
@@ -63,13 +61,13 @@ export default {
                         )
                         .setTimestamp()
                         .setFooter({ text: embedFooter });
-                    
+                        
                     if (welcomeConfig.welcomeImage) {
                         embed.setImage(welcomeConfig.welcomeImage);
                     } else if (welcomeConfig.welcomeEmbed?.image?.url) {
                         embed.setImage(welcomeConfig.welcomeEmbed.image.url);
                     }
-                    
+                        
                     await channel.send({ 
                         content: messageContent,
                         embeds: [embed] 
@@ -78,9 +76,14 @@ export default {
             }
         }
         
-        if (welcomeConfig?.roleIds && welcomeConfig.roleIds.length > 0) {
-            const delay = welcomeConfig.autoRoleDelay || 0;
-            const singleRoleId = welcomeConfig.roleIds[0];
+        // --- AUTOROLE SYSTEM ---
+        // Scheid de rollen op basis van member.user.bot
+        const targetRoleIds = user.bot ? welcomeConfig?.botRoleIds : welcomeConfig?.roleIds;
+
+        if (targetRoleIds && targetRoleIds.length > 0) {
+            // Pas de vertraging alleen toe op menselijke gebruikers, bots krijgen de rol direct
+            const delay = user.bot ? 0 : (welcomeConfig.autoRoleDelay || 0);
+            const singleRoleId = targetRoleIds[0];
             
             if (delay > 0) {
                 const timeout = setTimeout(async () => {
@@ -99,7 +102,7 @@ export default {
                 }
             }
         }
-        
+
         if (config?.verification?.enabled || config?.verification?.autoVerify?.enabled) {
             await handleVerification(member, guild, config.verification, member.client);
         }
@@ -178,7 +181,6 @@ async function handleVerification(member, guild, verificationConfig, client) {
                 reason: result.reason
             });
         }
-
     } catch (error) {
         logger.error('Error in auto-verification for member', {
             guildId: guild.id,
