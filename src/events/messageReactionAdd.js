@@ -1,5 +1,4 @@
 import report from '../commands/Utility/modules/report.js';
-import { getGuildConfig } from '../services/config/guildConfig.js';
 
 export default {
     name: 'messageReactionAdd',
@@ -19,9 +18,13 @@ export default {
         const message = reaction.message;
         if (!message.guild) return;
 
-        const config = await getGuildConfig(message.guild.id);
+        // Laad alle kanalen van de server in de cache zodat report.js het kanaal kan vinden
+        try {
+            await message.guild.channels.fetch();
+        } catch (error) {
+            console.error('Fout bij ophalen van kanalen:', error);
+        }
 
-        // Hulpfunctie om terugkoppeling naar de melder via DM te sturen
         const sendDM = async (payload) => {
             try {
                 const dm = await user.createDM();
@@ -31,7 +34,6 @@ export default {
             }
         };
 
-        // Uitgebreid nep-interaction object met alle vereiste velden voor discord.js helpers
         const mockInteraction = {
             id: message.id,
             createdTimestamp: Date.now(),
@@ -75,7 +77,8 @@ export default {
         };
 
         try {
-            await report.execute(mockInteraction, config, client);
+            // Geef client.config (app config) mee in plaats van guildConfig
+            await report.execute(mockInteraction, client.config, client);
         } catch (error) {
             console.error('Fout bij uitvoeren van report via reactie:', error);
         }
