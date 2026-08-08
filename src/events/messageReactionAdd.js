@@ -4,10 +4,9 @@ import { getGuildConfig } from '../services/config/guildConfig.js';
 export default {
     name: 'messageReactionAdd',
     async execute(reaction, user, client) {
-        // Negeer reacties van bots
         if (user.bot) return;
 
-        // Vul onvolledige data aan (partials)
+        // Ophalen van partials voor oude berichten
         if (reaction.partial) {
             try { await reaction.fetch(); } catch { return; }
         }
@@ -15,61 +14,77 @@ export default {
             try { await reaction.message.fetch(); } catch { return; }
         }
 
-        // Controleer of de emoji de rode cirkel is
         if (reaction.emoji.name !== '🔴') return;
 
         const message = reaction.message;
         if (!message.guild) return;
 
-        // Haal de serverconfiguratie op
         const config = await getGuildConfig(message.guild.id);
 
-        // Bouw een nep-interaction object zodat report.execute() denkt dat het een slash command is
+        // Hulpfunctie om terugkoppeling naar de melder via DM te sturen
+        const sendDM = async (payload) => {
+            try {
+                const dm = await user.createDM();
+                return await dm.send(payload);
+            } catch {
+                // Mislukt als de gebruiker DM's uit heeft staan
+            }
+        };
+
+        // Uitgebreid nep-interaction object met alle vereiste velden voor discord.js helpers
         const mockInteraction = {
+            id: message.id,
+            createdTimestamp: Date.now(),
             guild: message.guild,
+            guildId: message.guild.id,
             channel: message.channel,
+            channelId: message.channel.id,
             user: user,
             member: await message.guild.members.fetch(user.id).catch(() => null),
             client: client,
+            
+            deferred: false,
+            replied: false,
+            isReplied: false,
+
             options: {
                 getSubcommand: () => 'file',
                 getUser: (name) => (name === 'user' ? message.author : null),
                 getString: (name) => (name === 'reason' ? `Rapportage via 🔴 reactie op bericht: ${message.url}` : null),
             },
-            // Zorg dat antwoorden van de report module in de DM van de melder terechtkomen
-            reply: async (payload) => {
-                try {
-                    const dm = await user.createDM();
-                    return await dm.send(payload);
-                } catch {
-                    // Mislukt als de gebruiker DMs uit heeft staan
-                }
+
+            inGuild: () => true,
+            isChatInputCommand: () => true,
+            isCommand: () => true,
+
+            deferReply: async () => {
+                mockInteraction.deferred = true;
+                return Promise.resolve();
             },
-            deferReply: async () => {},
+            reply: async (payload) => {
+                mockInteraction.replied = true;
+                mockInteraction.isReplied = true;
+                return await sendDM(payload);
+            },
             editReply: async (payload) => {
-                try {
-                    const dm = await user.createDM();
-                    return await dm.send(payload);
-                } catch {}
+                return await sendDM(payload);
             },
             followUp: async (payload) => {
-                try {
-                    const dm = await user.createDM();
-                    return await dm.send(payload);
-                } catch {}
+                return await sendDM(payload);
             },
-            isReplied: false,
-            deferred: false,
         };
 
-        // Voer je bestaande report module uit
-        await report.execute(mockInteraction, config, client);
+        try {
+            await report.execute(mockInteraction, config, client);
+        } catch (error) {
+            console.error('Fout bij uitvoeren van report via reactie:', error);
+        }
 
-        // Verwijder de 🔴 emoji van de gebruiker om opruim/duplicaat rapporten te voorkomen
+        // Verwijder de reactie van de gebruiker
         try {
             await reaction.users.remove(user.id);
         } catch {
-            // Vereist 'Manage Messages' permissie op de bot
+            // Negeer als de bot geen Manage Messages permissie heeft
         }
     },
 };
