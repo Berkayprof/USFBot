@@ -64,7 +64,7 @@ export default {
             options: {
                 getSubcommand: () => 'file',
                 getUser: (name) => (name === 'user' ? message.author : null),
-                getString: (name) => (name === 'reason' ? `Rapportage via 🔴 reactie op bericht: ${message.url}` : null),
+                getString: (name) => (name === 'reason' ? `Rapported via 🔴 reaction on message: ${message.url}` : null),
             },
 
             inGuild: () => true,
