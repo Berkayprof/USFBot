@@ -1,12 +1,12 @@
 import report from '../commands/Utility/modules/report.js';
-import { getGuildConfig, readGuildConfig } from '../services/config/guildConfig.js';
+import { getGuildConfig } from '../services/config/guildConfig.js';
 
 export default {
     name: 'messageReactionAdd',
     async execute(reaction, user, client) {
         if (user.bot) return;
 
-        // Ophalen van partials voor oude berichten
+        // Partial bericht/reactie ophalen indien nodig
         if (reaction.partial) {
             try { await reaction.fetch(); } catch { return; }
         }
@@ -19,21 +19,16 @@ export default {
         const message = reaction.message;
         if (!message.guild) return;
 
-        // Laad alle kanalen van de server in de cache
+        // Zorg dat kanalen in de cache staan
         try {
             await message.guild.channels.fetch();
         } catch (error) {
             console.error('Fout bij ophalen van kanalen:', error);
         }
 
-        // Haal de serverconfiguratie op met de juiste parameters (client + guildId)
         let guildConfig = null;
         try {
-            if (typeof getGuildConfig === 'function') {
-                guildConfig = await getGuildConfig(client, message.guild.id);
-            } else if (typeof readGuildConfig === 'function') {
-                guildConfig = await readGuildConfig(client, message.guild.id);
-            }
+            guildConfig = await getGuildConfig(client, message.guild.id);
         } catch (error) {
             console.error('Fout bij ophalen van guildConfig:', error);
         }
@@ -43,7 +38,7 @@ export default {
                 const dm = await user.createDM();
                 return await dm.send(payload);
             } catch {
-                // Mislukt als de gebruiker DM's uit heeft staan
+                // Mislukt als de gebruiker DM's heeft uitstaan
             }
         };
 
@@ -91,7 +86,6 @@ export default {
         };
 
         try {
-            // Geef de opgehaalde guildConfig door als 2e argument
             await report.execute(mockInteraction, guildConfig, client);
         } catch (error) {
             console.error('Fout bij uitvoeren van report via reactie:', error);
@@ -101,7 +95,7 @@ export default {
         try {
             await reaction.users.remove(user.id);
         } catch {
-            // Negeer als de bot geen Manage Messages permissie heeft
+            // Negeer als permissies ontbreken
         }
     },
 };
