@@ -1,4 +1,5 @@
 import report from '../commands/Utility/modules/report.js';
+import { getGuildConfig, readGuildConfig } from '../services/config/guildConfig.js';
 
 export default {
     name: 'messageReactionAdd',
@@ -18,11 +19,23 @@ export default {
         const message = reaction.message;
         if (!message.guild) return;
 
-        // Laad alle kanalen van de server in de cache zodat report.js het kanaal kan vinden
+        // Laad alle kanalen van de server in de cache
         try {
             await message.guild.channels.fetch();
         } catch (error) {
             console.error('Fout bij ophalen van kanalen:', error);
+        }
+
+        // Haal de serverconfiguratie op met de juiste parameters (client + guildId)
+        let guildConfig = null;
+        try {
+            if (typeof getGuildConfig === 'function') {
+                guildConfig = await getGuildConfig(client, message.guild.id);
+            } else if (typeof readGuildConfig === 'function') {
+                guildConfig = await readGuildConfig(client, message.guild.id);
+            }
+        } catch (error) {
+            console.error('Fout bij ophalen van guildConfig:', error);
         }
 
         const sendDM = async (payload) => {
@@ -44,6 +57,7 @@ export default {
             user: user,
             member: await message.guild.members.fetch(user.id).catch(() => null),
             client: client,
+            db: client.db,
             
             deferred: false,
             replied: false,
@@ -77,8 +91,8 @@ export default {
         };
 
         try {
-            // Geef client.config (app config) mee in plaats van guildConfig
-            await report.execute(mockInteraction, client.config, client);
+            // Geef de opgehaalde guildConfig door als 2e argument
+            await report.execute(mockInteraction, guildConfig, client);
         } catch (error) {
             console.error('Fout bij uitvoeren van report via reactie:', error);
         }
