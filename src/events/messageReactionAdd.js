@@ -3,8 +3,11 @@ import { getGuildConfig } from '../services/config/guildConfig.js';
 
 export default {
     name: 'messageReactionAdd',
-    async execute(reaction, user, client) {
+    async execute(reaction, user) {
         if (user.bot) return;
+
+        // Ophalen van client uit de reactie
+        const client = reaction.client;
 
         // Partial bericht/reactie ophalen indien nodig
         if (reaction.partial) {
