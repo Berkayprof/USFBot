@@ -363,6 +363,7 @@ function normalizeWelcomeConfig(raw = {}) {
     };
 
     const roleIds = Array.isArray(base.roleIds) ? base.roleIds : [];
+    const botRoleIds = Array.isArray(base.botRoleIds) ? base.botRoleIds : []; // <-- Toegevoegd
 
     return {
         ...base,
@@ -379,6 +380,7 @@ function normalizeWelcomeConfig(raw = {}) {
         dmMessage: base.dmMessage ?? "",
         goodbyePing: Boolean(base.goodbyePing),
         roleIds,
+        botRoleIds, // <-- Toegevoegd
         autoRoleDelay: base.autoRoleDelay ?? 0,
         joinLogs: base.joinLogs ?? { enabled: false, channelId: null },
         leaveLogs: base.leaveLogs ?? { enabled: false, channelId: null }
