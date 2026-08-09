@@ -330,139 +330,145 @@ async function handleReview(interaction) {
     });
 
     collector.on('collect', async buttonInteraction => {
-        const isApprove = buttonInteraction.customId.includes('approve');
+    const isApprove = buttonInteraction.customId.includes('approve');
 
-        const reasonModal = new ModalBuilder()
-            .setCustomId(`app_review_reason_${appId}_${isApprove ? 'approve' : 'deny'}`)
-            .setTitle(`${isApprove ? 'Approve' : 'Deny'} Application - Reason`);
+    const reasonModal = new ModalBuilder()
+        .setCustomId(`app_review_reason_${appId}_${isApprove ? 'approve' : 'deny'}`)
+        .setTitle(`${isApprove ? 'Approve' : 'Deny'} Application - Reason`);
 
-        reasonModal.addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('review_reason')
-                    .setLabel('Reason (optional)')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Provide a reason for this decision...')
-                    .setMaxLength(500)
-                    .setRequired(false),
-            ),
+    reasonModal.addComponents(
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('review_reason')
+                .setLabel('Reason (optional)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Provide a reason for this decision...')
+                .setMaxLength(500)
+                .setRequired(false),
+        ),
+    );
+
+    await buttonInteraction.showModal(reasonModal);
+
+    try {
+        const reasonSubmit = await buttonInteraction.awaitModalSubmit({
+            time: 5 * 60 * 1000, 
+            filter: i =>
+                i.customId === `app_review_reason_${appId}_${isApprove ? 'approve' : 'deny'}` &&
+                i.user.id === buttonInteraction.user.id,
+        }).catch(() => null);
+
+        if (!reasonSubmit) return;
+
+        // 1. Direct deferren om te voorkomen dat de interactie na 3 seconden verloopt:
+        await InteractionHelper.safeDefer(reasonSubmit, { flags: ['Ephemeral'] });
+
+        const reason = reasonSubmit.fields.getTextInputValue('review_reason').trim() || "No reason provided.";
+        const action = isApprove ? 'approve' : 'deny';
+        const status = isApprove ? 'approved' : 'denied';
+
+        const updatedApplication = await ApplicationService.reviewApplication(
+            reasonSubmit.client,
+            interaction.guild.id,
+            appId,
+            {
+                action,
+                reason,
+                reviewerId: reasonSubmit.user.id
+            }
         );
 
-        await buttonInteraction.showModal(reasonModal);
-
+        // Send DM to user
         try {
-            const reasonSubmit = await buttonInteraction.awaitModalSubmit({
-                time: 5 * 60 * 1000, 
-                filter: i =>
-                    i.customId === `app_review_reason_${appId}_${isApprove ? 'approve' : 'deny'}` &&
-                    i.user.id === buttonInteraction.user.id,
-            }).catch(() => null);
+            const user = await reasonSubmit.client.users.fetch(application.userId);
+            const statusColor = getApplicationStatusColor(status);
+            const reviewStatus = getApplicationStatusPresentation(status);
+            const dmEmbed = createEmbed({
+                title: `${reviewStatus.statusEmoji} Application ${reviewStatus.statusLabel}`,
+                description: `Your application for **${application.roleName}** has been **${status}**\n` +
+                    `**Note:** ${reason}\n\n` +
+                    `Use \`/apply status id:${appId}\` to view details.`
+            }).setColor(statusColor);
 
-            if (!reasonSubmit) return;
+            await user.send({ embeds: [dmEmbed] });
+        } catch (error) {
+            logger.warn('Failed to send DM to user for application review', {
+                error: error.message,
+                userId: application.userId,
+                applicationId: appId
+            });
+        }
 
-            const reason = reasonSubmit.fields.getTextInputValue('review_reason').trim() || "No reason provided.";
-            const action = isApprove ? 'approve' : 'deny';
-            const status = isApprove ? 'approved' : 'denied';
-
-            const updatedApplication = await ApplicationService.reviewApplication(
-                reasonSubmit.client,
-                interaction.guild.id,
-                appId,
-                {
-                    action,
-                    reason,
-                    reviewerId: reasonSubmit.user.id
-                }
-            );
-
+        // Update log message
+        if (application.logMessageId && application.logChannelId) {
             try {
-                const user = await reasonSubmit.client.users.fetch(application.userId);
                 const statusColor = getApplicationStatusColor(status);
-                const reviewStatus = getApplicationStatusPresentation(status);
-                const dmEmbed = createEmbed({
-                    title: `${reviewStatus.statusEmoji} Application ${reviewStatus.statusLabel}`,
-                    description: `Your application for **${application.roleName}** has been **${status}**\n` +
-                        `**Note:** ${reason}\n\n` +
-                        `Use \`/apply status id:${appId}\` to view details.`
-                }).setColor(statusColor);
+                const logChannel = interaction.guild.channels.cache.get(
+                    application.logChannelId,
+                );
+                if (logChannel) {
+                    const logMessage = await logChannel.messages.fetch(
+                        application.logMessageId,
+                    );
+                    if (logMessage) {
+                        const embed = logMessage.embeds[0];
+                        if (embed) {
+                            const reviewStatus = getApplicationStatusPresentation(status);
+                            const newEmbed = EmbedBuilder.from(embed)
+                                .setColor(statusColor)
+                                .spliceFields(0, 1, {
+                                    name: "Status",
+                                    value: `${reviewStatus.statusEmoji} ${reviewStatus.statusLabel}`,
+                                });
 
-                await user.send({ embeds: [dmEmbed] });
+                            await logMessage.edit({
+                                embeds: [newEmbed],
+                                components: [],
+                            });
+                        }
+                    }
+                }
             } catch (error) {
-                logger.warn('Failed to send DM to user for application review', {
+                logger.warn('Failed to update log message for application', {
+                    error: error.message,
+                    applicationId: appId,
+                    logMessageId: application.logMessageId
+                });
+            }
+        }
+
+        // Add role if approved
+        if (isApprove) {
+            try {
+                const member = await interaction.guild.members.fetch(
+                    application.userId,
+                );
+                await member.roles.add(application.roleId);
+            } catch (error) {
+                logger.error('Failed to assign role to approved applicant', {
                     error: error.message,
                     userId: application.userId,
+                    roleId: application.roleId,
                     applicationId: appId
                 });
             }
-
-            if (application.logMessageId && application.logChannelId) {
-                try {
-                    const statusColor = getApplicationStatusColor(status);
-                    const logChannel = interaction.guild.channels.cache.get(
-                        application.logChannelId,
-                    );
-                    if (logChannel) {
-                        const logMessage = await logChannel.messages.fetch(
-                            application.logMessageId,
-                        );
-                        if (logMessage) {
-                            const embed = logMessage.embeds[0];
-                            if (embed) {
-                                const reviewStatus = getApplicationStatusPresentation(status);
-                                const newEmbed = EmbedBuilder.from(embed)
-                                    .setColor(statusColor)
-                                    .spliceFields(0, 1, {
-                                        name: "Status",
-                                        value: `${reviewStatus.statusEmoji} ${reviewStatus.statusLabel}`,
-                                    });
-
-                                await logMessage.edit({
-                                    embeds: [newEmbed],
-                                    components: [],
-                                });
-                            }
-                        }
-                    }
-                } catch (error) {
-                    logger.warn('Failed to update log message for application', {
-                        error: error.message,
-                        applicationId: appId,
-                        logMessageId: application.logMessageId
-                    });
-                }
-            }
-
-            if (isApprove) {
-                try {
-                    const member = await interaction.guild.members.fetch(
-                        application.userId,
-                    );
-                    await member.roles.add(application.roleId);
-                } catch (error) {
-                    logger.error('Failed to assign role to approved applicant', {
-                        error: error.message,
-                        userId: application.userId,
-                        roleId: application.roleId,
-                        applicationId: appId
-                    });
-                }
-            }
-
-            await reasonSubmit.reply({
-                embeds: [
-                    successEmbed(
-                        `Application ${status}`,
-                        `The application has been **${status}**.`,
-                    ),
-                ],
-                flags: ["Ephemeral"],
-            });
-
-        } catch (error) {
-            logger.error('Error reviewing application:', error);
-            await replyUserError(buttonInteraction, { type: ErrorTypes.UNKNOWN, message: 'An error occurred while reviewing the application.' });
         }
-    });
+
+        // 2. Gebruik editReply in plaats van reply:
+        await InteractionHelper.safeEditReply(reasonSubmit, {
+            embeds: [
+                successEmbed(
+                    `Application ${status}`,
+                    `The application has been **${status}**.`,
+                ),
+            ],
+        });
+
+    } catch (error) {
+        logger.error('Error reviewing application:', error);
+        await replyUserError(buttonInteraction, { type: ErrorTypes.UNKNOWN, message: 'An error occurred while reviewing the application.' });
+    }
+});
 
     collector.on('end', async (collected, reason) => {
         if (reason === 'time') {
