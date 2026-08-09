@@ -6,25 +6,25 @@ export default {
   category: 'Utility',
   data: new SlashCommandBuilder()
     .setName('forum')
-    .setDescription('Forum management instellingen')
+    .setDescription('Forum management settings')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addSubcommand(sub =>
       sub.setName('setup')
-        .setDescription('Voeg een forumkanaal toe of verwijder deze voor inactiviteitscontrole')
+        .setDescription('Add or remove a forum channel for inactivity monitoring')
         .addChannelOption(opt =>
           opt.setName('channel')
-            .setDescription('Het forumkanaal')
+            .setDescription('The forum channel')
             .addChannelTypes(ChannelType.GuildForum)
             .setRequired(true)
         )
     )
     .addSubcommand(sub =>
       sub.setName('solved')
-        .setDescription('Markeer de huidige forum post als opgelost')
+        .setDescription('Mark the current forum post as resolved')
     )
     .addSubcommand(sub =>
       sub.setName('resolved')
-        .setDescription('Markeer de huidige forum post als opgelost')
+        .setDescription('Mark the current forum post as resolved')
     ),
 
   async execute(interaction, guildConfig, client) {
@@ -42,7 +42,7 @@ export default {
           forumManagement: { channels: forumChannels }
         });
         return await interaction.reply({
-          content: `✅ Forumkanaal ${channel} is **verwijderd** uit het inactiviteitsbeheer.`,
+          content: `✅ Forum channel ${channel} has been **removed** from inactivity management.`,
           ephemeral: true
         });
       } else {
@@ -51,7 +51,7 @@ export default {
           forumManagement: { channels: forumChannels }
         });
         return await interaction.reply({
-          content: `✅ Forumkanaal ${channel} is **toegevoegd** aan het inactiviteitsbeheer.`,
+          content: `✅ Forum channel ${channel} has been **added** to inactivity management.`,
           ephemeral: true
         });
       }
@@ -61,7 +61,7 @@ export default {
       const thread = interaction.channel;
       if (!thread.isThread() || thread.parent?.type !== ChannelType.GuildForum) {
         return await interaction.reply({
-          content: '❌ Dit commando kan alleen binnen een forum-post worden gebruikt.',
+          content: '❌ This command can only be used inside a forum post.',
           ephemeral: true
         });
       }
@@ -71,12 +71,12 @@ export default {
 
       if (!isOwner && !isMod) {
         return await interaction.reply({
-          content: '❌ Alleen de maker van de post of een moderator kan dit commando gebruiken.',
+          content: '❌ Only the author of the post or a moderator can use this command.',
           ephemeral: true
         });
       }
 
-      await interaction.reply({ content: '🔒 Post wordt opgelost en vergrendeld...' });
+      await interaction.reply({ content: '🔒 Post is being resolved and locked...' });
       await resolveForumThread(thread, true);
     }
   }

@@ -2,7 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType
 import { getGuildConfig } from './config/guildConfig.js';
 import { logger } from '../utils/logger.js';
 
-const INACTIVITY_CHECK_INTERVAL = 15 * 60 * 1000; // 15 minuten
+const INACTIVITY_CHECK_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
@@ -31,7 +31,7 @@ async function checkForumInactivity(client) {
         }
       }
     } catch (error) {
-      logger.error(`Fout bij forum inactiviteitscontrole in guild ${guild.id}:`, error);
+      logger.error(`Error during forum inactivity check in guild ${guild.id}:`, error);
     }
   }
 }
@@ -49,7 +49,7 @@ async function processThreadInactivity(thread) {
       lastMessage.embeds.length > 0 &&
       lastMessage.embeds[0].title === 'Inactive Forum Post';
 
-    // 24 uur geen reactie op de herinnerings-embed -> Auto Lock
+    // 24 hours of no response to the reminder embed -> Auto Lock
     if (isPromptMessage) {
       if (timeSinceLastMsg >= TWENTY_FOUR_HOURS) {
         await resolveForumThread(thread, false);
@@ -57,7 +57,7 @@ async function processThreadInactivity(thread) {
       return;
     }
 
-    // 48 uur geen activiteit -> Stuur herinnerings-embed
+    // 48 hours of no activity -> Send reminder embed
     if (timeSinceLastMsg >= FORTY_EIGHT_HOURS) {
       const embed = new EmbedBuilder()
         .setTitle('Inactive Forum Post')
@@ -84,7 +84,7 @@ async function processThreadInactivity(thread) {
       });
     }
   } catch (err) {
-    logger.error(`Fout bij verwerken van thread ${thread.id}:`, err);
+    logger.error(`Error processing thread ${thread.id}:`, err);
   }
 }
 
@@ -97,7 +97,7 @@ export async function handleForumButton(interaction, client) {
 
   if (!isOwner && !isMod) {
     return await interaction.reply({
-      content: '❌ Alleen de maker van deze post kan op deze knop drukken.',
+      content: '❌ Only the author of this post can click this button.',
       ephemeral: true
     });
   }
@@ -115,7 +115,7 @@ export async function resolveForumThread(thread, isResolvedByChoice = true) {
   try {
     const parent = thread.parent;
 
-    // Tag toevoegen als deze in het forum aanwezig is
+    // Add tag if available in the forum
     if (isResolvedByChoice && parent?.availableTags?.length > 0) {
       const resolvedTag = parent.availableTags.find(tag =>
         tag.name.toLowerCase().includes('solved') || tag.name.toLowerCase().includes('resolved')
@@ -134,6 +134,6 @@ export async function resolveForumThread(thread, isResolvedByChoice = true) {
       await thread.send('# Locked - Inactive\nThis post was automatically locked because there was no response to the inactivity check within 24 hours.');
     }
   } catch (error) {
-    logger.error(`Fout bij sluiten van forum thread ${thread.id}:`, error);
+    logger.error(`Error closing forum thread ${thread.id}:`, error);
   }
 }
