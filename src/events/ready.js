@@ -5,6 +5,7 @@ import { reconcileReactionRoleMessages } from "../services/reactionRoleService.j
 import { reconcileTicketPanels, reconcileVerificationPanels, reconcileReactionRolePanelHealth } from "../services/panelHealthService.js";
 import { reconcileLevelRoles } from "../services/leveling/levelRoleSyncService.js";
 import { initRiffyAfterReady } from "../services/music/riffySetup.js";
+import { startForumInactivityChecker } from "../services/forumInactivityService.js";
 
 export default {
   name: Events.ClientReady,
@@ -21,6 +22,9 @@ export default {
       if (client.config?.features?.music) {
         initRiffyAfterReady(client);
       }
+
+      startForumInactivityChecker(client);
+      startupLog("Forum inactivity service initialized");
 
       const reconciliationSummary = await reconcileReactionRoleMessages(client);
       startupLog(
